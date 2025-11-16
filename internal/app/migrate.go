@@ -1,4 +1,4 @@
-//go:build migrate
+// //go:build migrate
 
 package app
 
@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
+	"github.com/joho/godotenv"
 	// migrate tools
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
@@ -20,6 +21,10 @@ const (
 )
 
 func init() {
+	if err := godotenv.Load(); err != nil {
+		log.Printf("Warning: No .env file found: %v", err)
+	}
+
 	databaseURL, ok := os.LookupEnv("PG_URL")
 	if !ok || len(databaseURL) == 0 {
 		log.Fatalf("migrate: environment variable not declared: PG_URL")

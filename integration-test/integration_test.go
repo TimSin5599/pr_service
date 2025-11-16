@@ -10,18 +10,11 @@ import (
 	"os"
 	"testing"
 	"time"
-
-	protov1 "github.com/evrone/go-clean-template/docs/proto/v1"
-	natsClient "github.com/evrone/go-clean-template/pkg/nats/nats_rpc/client"
-	rmqClient "github.com/evrone/go-clean-template/pkg/rabbitmq/rmq_rpc/client"
-	"github.com/goccy/go-json"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 const (
 	// Base settings
-	host     = "app"
+	host     = "localhost"
 	attempts = 20
 
 	// Attempts connection
@@ -31,23 +24,6 @@ const (
 
 	// HTTP REST
 	basePathV1 = httpURL + "/v1"
-
-	// gRPC
-	grpcURL = host + ":8081"
-
-	// RPC configs
-	rpcServerExchange = "rpc_server"
-	rpcClientExchange = "rpc_client"
-	requests          = 10
-
-	// RabbitMQ RPC
-	rmqURL = "amqp://guest:guest@rabbitmq:5672/"
-
-	// RabbitMQ RPC
-	natsURL = "nats://guest:guest@nats:4222/"
-
-	// Test data
-	expectedOriginal = "текст для перевода"
 )
 
 var errHealthCheck = fmt.Errorf("url %s is not available", healthPath)
@@ -81,21 +57,12 @@ func getHealthCheck(url string) (int, error) {
 func healthCheck(attempts int) error {
 	for attempts > 0 {
 		statusCode, err := getHealthCheck(healthPath)
-		if err != nil {
-			return err
-		}
-
-		if statusCode == http.StatusOK {
+		if err == nil && statusCode == http.StatusOK {
 			return nil
 		}
-
-		log.Printf("Integration tests: url %s is not available, attempts left: %d", healthPath, attempts)
-
 		time.Sleep(time.Second)
-
 		attempts--
 	}
-
 	return errHealthCheck
 }
 
@@ -111,212 +78,149 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// HTTP POST: /v1/translation/do-translate.
-func TestHTTPDoTranslateV1(t *testing.T) {
-	tests := []struct {
-		description string
-		body        string
-		expected    int
-	}{
-		{
-			description: "DoTranslate Success",
-			body: `{
-				"destination": "en",
-				"original": "текст для перевода",
-				"source": "auto"
-			}`,
-			expected: http.StatusOK,
-		},
-		{
-			description: "DoTranslate Success",
-			body: `{
-				"destination": "en",
-				"original": "Текст для перевода",
-				"source": "ru"
-			}`,
-			expected: http.StatusOK,
-		},
-		{
-			description: "DoTranslate Fail",
-			body: `{
-				"destination": "en",
-				"original": "текст для перевода"
-			}`,
-			expected: http.StatusBadRequest,
-		},
-	}
+func TestE2EFlow(t *testing.T) {
+	t.Log("E2E flow test...")
 
-	for _, tt := range tests {
-		t.Run(tt.description, func(t *testing.T) {
-			url := basePathV1 + "/translation/do-translate"
-			ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
+	t.Log("Step 1: Creating team 'backend4'...")
+	teamBody := `{"team_name": "backend4", "members": [
+		{"user_id": "u1", "username": "Alice", "is_active": true},
+		{"user_id": "u2", "username": "Bob", "is_active": true},
+		{"user_id": "u3", "username": "Charlie", "is_active": true},
+		{"user_id": "u9", "username": "Donald", "is_active": true}
+	]}`
+	doRequest(t, "POST", basePathV1+"/team/add", teamBody, 201)
+	t.Log("Team 'backend4' created successfully")
 
-			defer cancel()
+	t.Log("Step 2: Getting team 'backend4' info...")
+	doRequest(t, "GET", basePathV1+"/team/get?team_name=backend4", "", 200)
+	t.Log("Team info retrieved successfully")
 
-			resp, err := doWebRequestWithTimeout(ctx, http.MethodPost, url, bytes.NewBuffer([]byte(tt.body)))
-			if err != nil {
-				t.Fatalf("Failed to send request: %v", err)
-			}
+	t.Log("Step 3: Creating first PR...")
+	prBody := `{"pull_request_id":"pr-1024","pull_request_name":"Test PR","author_id":"u1"}`
+	doRequest(t, "POST", basePathV1+"/pullRequest/create", prBody, 201)
+	t.Log("First PR created successfully")
 
-			defer resp.Body.Close()
+	t.Log("👥 Step 4: Checking assigned reviews...")
+	doRequest(t, "GET", basePathV1+"/users/getReview?user_id=u2", "", 200)
+	t.Log("Reviews for u2 checked successfully")
+	doRequest(t, "GET", basePathV1+"/users/getReview?user_id=u3", "", 200)
+	t.Log("Reviews for u3 checked successfully")
 
-			if resp.StatusCode != tt.expected {
-				t.Errorf("Expected status %d, got %d", tt.expected, resp.StatusCode)
-			}
-		})
-	}
+	t.Log("Step 5: Reassigning reviewer...")
+	reassignBody := `{"pull_request_id":"pr-1024","old_user_id":"u2"}`
+	doRequest(t, "POST", basePathV1+"/pullRequest/reassign", reassignBody, 200)
+	t.Log("Reviewer reassigned successfully")
+
+	t.Log("Step 6: Merging first PR...")
+	mergeBody := `{"pull_request_id":"pr-1024"}`
+	doRequest(t, "POST", basePathV1+"/pullRequest/merge", mergeBody, 200)
+	t.Log("First PR merged successfully")
+
+	t.Log("Step 7: Testing idempotent merge...")
+	doRequest(t, "POST", basePathV1+"/pullRequest/merge", mergeBody, 200)
+	t.Log("Idempotent merge verified successfully")
+
+	t.Log("Step 8: Deactivating user u3...")
+	setInactive := `{"user_id":"u3","is_active":false}`
+	doRequest(t, "POST", basePathV1+"/users/setIsActive", setInactive, 200)
+	t.Log("User u3 deactivated successfully")
+
+	t.Log("Step 9: Creating second PR...")
+	prBody2 := `{"pull_request_id":"pr-1025","pull_request_name":"Test PR2","author_id":"u1"}`
+	doRequest(t, "POST", basePathV1+"/pullRequest/create", prBody2, 201)
+	t.Log("Second PR created successfully")
+
+	t.Log("Step 10: Testing PR creation with non-existent author...")
+	badPR := `{"pull_request_id":"pr-1026","pull_request_name":"Bad PR","author_id":"not-exist"}`
+	doRequest(t, "POST", basePathV1+"/pullRequest/create", badPR, 404)
+	t.Log("Properly handled non-existent author case")
+
+	t.Log("Step 11: Getting system stats...")
+	doRequest(t, "GET", basePathV1+"/stats", "", 200)
+	t.Log("Stats retrieved successfully")
+
+	t.Log("Step 12: Health check...")
+	doRequest(t, "GET", httpURL+"/healthz", "", 200)
+	t.Log("Health check passed")
+
+	t.Log("All E2E tests completed successfully!")
 }
 
-// HTTP GET: /v1/translation/history.
-func TestHTTPHistoryV1(t *testing.T) {
-	url := basePathV1 + "/translation/history"
-	ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
+func TestAdditionalScenarios(t *testing.T) {
+	t.Log("Starting additional scenarios test...")
 
-	defer cancel()
+	t.Log("Testing duplicate team creation...")
+	teamBody := `{"team_name": "duplicate-team", "members": [
+		{"user_id": "duplicate-user", "username": "Duplicate User", "is_active": true}
+	]}`
+	doRequest(t, "POST", basePathV1+"/team/add", teamBody, 201)
+	t.Log("First team creation successful")
+	
+	doRequest(t, "POST", basePathV1+"/team/add", teamBody, 400)
+	t.Log("Duplicate team creation properly rejected")
 
-	resp, err := doWebRequestWithTimeout(ctx, http.MethodGet, url, http.NoBody)
-	if err != nil {
-		t.Fatalf("Failed to send request: %v", err)
-	}
+	t.Log("🔍 Testing non-existent team...")
+	doRequest(t, "GET", basePathV1+"/team/get?team_name=nonexistent", "", 404)
+	t.Log("Non-existent team properly handled")
 
-	defer resp.Body.Close()
+	t.Log("👥 Testing team deactivation...")
+	deactivateBody := `{"team_name": "duplicate-team"}`
+	doRequest(t, "POST", basePathV1+"/users/deactivateTeam", deactivateBody, 200)
+	t.Log("Team deactivation successful")
 
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("Expected status %d, got %d", http.StatusOK, resp.StatusCode)
-	}
-
-	var body struct {
-		History []struct {
-			Source      string `json:"source"`
-			Destination string `json:"destination"`
-			Original    string `json:"original"`
-			Translation string `json:"translation"`
-		} `json:"history"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		t.Fatalf("Failed to decode response body: %v", err)
-	}
-
-	if len(body.History) == 0 {
-		t.Error("Expected non-empty history")
-	}
+	t.Log("Additional scenarios completed successfully!")
 }
 
-// gRPC Client V1: GetHistory.
-func TestClientGRPCV1(t *testing.T) {
-	grpcConn, err := grpc.NewClient(grpcURL, grpc.WithTransportCredentials(insecure.NewCredentials()))
+func doRequest(t *testing.T, method, url, body string, wantStatus int) *http.Response {
+	req, err := http.NewRequest(method, url, bytes.NewBufferString(body))
 	if err != nil {
-		t.Fatal("gRPC Client - init error - grpc.NewClient", err)
+		t.Fatalf("Request creation error: %v", err)
 	}
-
-	defer func() {
-		err = grpcConn.Close()
-		if err != nil {
-			t.Fatal("gRPC Client - shutdown error - grpcClientV1.GetHistory", err)
-		}
-	}()
-
-	grpcClientV1 := protov1.NewTranslationClient(grpcConn)
-
-	for i := 0; i < requests; i++ {
-		history, err := grpcClientV1.GetHistory(t.Context(), &protov1.GetHistoryRequest{})
-		if err != nil {
-			t.Fatal("gRPC Client - remote call error - grpcClientV1.GetHistory", err)
-		}
-
-		if len(history.History) == 0 {
-			t.Fatal("History slice is empty, expected at least one entry")
-		}
-
-		if history.History[0].Original != expectedOriginal {
-			t.Fatalf("Original mismatch: expected %q, got %q", expectedOriginal, history.History[0].Original)
-		}
+	req.Header.Set("Content-Type", "application/json")
+	
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("HTTP request error: %v", err)
 	}
+	
+	if resp.StatusCode != wantStatus {
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		t.Fatalf("Unexpected status: got %d, want %d, body: %s", resp.StatusCode, wantStatus, string(b))
+	}
+	
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if len(b) > 0 {
+			t.Logf("📨 Response: %s", string(b))
+		}
+		resp.Body = io.NopCloser(bytes.NewBuffer(b))
+	}
+	
+	return resp
 }
 
-// RabbitMQ RPC Client V1: getHistory.
-func TestClientRMQRPCV1(t *testing.T) { //nolint: dupl,gocritic,nolintlint
-	client, err := rmqClient.New(rmqURL, rpcServerExchange, rpcClientExchange)
-	if err != nil {
-		t.Fatal("RabbitMQ RPC Client - init error - rmqClient.New", err)
-	}
+func TestEdgeCases(t *testing.T) {
+	t.Log("Starting edge cases test...")
 
-	defer func() {
-		err = client.Shutdown()
-		if err != nil {
-			t.Fatal("RabbitMQ RPC Client - shutdown error - client.RemoteCall", err)
-		}
-	}()
+	t.Log("Testing reassignment on merged PR...")
+	prBody := `{"pull_request_id":"edge-pr-1","pull_request_name":"Edge PR","author_id":"u1"}`
+	doRequest(t, "POST", basePathV1+"/pullRequest/create", prBody, 201)
+	t.Log("Edge PR created")
 
-	type Translation struct {
-		Source      string `json:"source"`
-		Destination string `json:"destination"`
-		Original    string `json:"original"`
-		Translation string `json:"translation"`
-	}
+	mergeBody := `{"pull_request_id":"edge-pr-1"}`
+	doRequest(t, "POST", basePathV1+"/pullRequest/merge", mergeBody, 200)
+	t.Log("Edge PR merged")
 
-	type historyResponse struct {
-		History []Translation `json:"history"`
-	}
+	reassignBody := `{"pull_request_id":"edge-pr-1","old_user_id":"u2"}`
+	doRequest(t, "POST", basePathV1+"/pullRequest/reassign", reassignBody, 409)
+	t.Log("Reassignment on merged PR properly rejected")
 
-	for i := 0; i < requests; i++ {
-		var history historyResponse
+	t.Log("Testing setIsActive with non-existent user...")
+	badUserBody := `{"user_id":"nonexistent-user","is_active":false}`
+	doRequest(t, "POST", basePathV1+"/users/setIsActive", badUserBody, 404)
+	t.Log("Non-existent user properly handled")
 
-		err = client.RemoteCall("v1.getHistory", nil, &history)
-		if err != nil {
-			t.Fatal("RabbitMQ RPC Client - remote call error - client.RemoteCall", err)
-		}
-
-		if len(history.History) == 0 {
-			t.Fatal("History slice is empty, expected at least one entry")
-		}
-
-		if history.History[0].Original != expectedOriginal {
-			t.Fatalf("Original mismatch: expected %q, got %q", expectedOriginal, history.History[0].Original)
-		}
-	}
-}
-
-// NATS RPC Client V1: getHistory.
-func TestClientNATSRPCV1(t *testing.T) { //nolint: dupl,gocritic,nolintlint
-	client, err := natsClient.New(natsURL, rpcServerExchange)
-	if err != nil {
-		t.Fatal("NATS RPC Client - init error - natsClient.New", err)
-	}
-
-	defer func() {
-		err = client.Shutdown()
-		if err != nil {
-			t.Fatal("NATS RPC Client - shutdown error - rmqClient.RemoteCall", err)
-		}
-	}()
-
-	type Translation struct {
-		Source      string `json:"source"`
-		Destination string `json:"destination"`
-		Original    string `json:"original"`
-		Translation string `json:"translation"`
-	}
-
-	type historyResponse struct {
-		History []Translation `json:"history"`
-	}
-
-	for i := 0; i < requests; i++ {
-		var history historyResponse
-
-		err = client.RemoteCall("v1.getHistory", nil, &history)
-		if err != nil {
-			t.Fatal("NATS RPC Client - remote call error - rmqClient.RemoteCall", err)
-		}
-
-		if len(history.History) == 0 {
-			t.Fatal("History slice is empty, expected at least one entry")
-		}
-
-		if history.History[0].Original != expectedOriginal {
-			t.Fatalf("Original mismatch: expected %q, got %q", expectedOriginal, history.History[0].Original)
-		}
-	}
+	t.Log("Edge cases completed successfully!")
 }
