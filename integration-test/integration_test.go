@@ -155,7 +155,7 @@ func TestAdditionalScenarios(t *testing.T) {
 	]}`
 	doRequest(t, "POST", basePathV1+"/team/add", teamBody, 201)
 	t.Log("First team creation successful")
-	
+
 	doRequest(t, "POST", basePathV1+"/team/add", teamBody, 400)
 	t.Log("Duplicate team creation properly rejected")
 
@@ -177,18 +177,18 @@ func doRequest(t *testing.T, method, url, body string, wantStatus int) *http.Res
 		t.Fatalf("Request creation error: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("HTTP request error: %v", err)
 	}
-	
+
 	if resp.StatusCode != wantStatus {
 		b, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		t.Fatalf("Unexpected status: got %d, want %d, body: %s", resp.StatusCode, wantStatus, string(b))
 	}
-	
+
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		b, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
@@ -197,7 +197,7 @@ func doRequest(t *testing.T, method, url, body string, wantStatus int) *http.Res
 		}
 		resp.Body = io.NopCloser(bytes.NewBuffer(b))
 	}
-	
+
 	return resp
 }
 

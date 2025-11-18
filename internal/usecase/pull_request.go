@@ -9,11 +9,11 @@ import (
 )
 
 var (
-	ErrNotFound     = errors.New("not found")
-	ErrPRExists     = errors.New("PR exists")
-	ErrPRMerged     = errors.New("PR_MERGED")
-	ErrNotAssigned  = errors.New("NOT_ASSIGNED")
-	ErrNoCandidate  = errors.New("NO_CANDIDATE")
+	ErrNotFound    = errors.New("not found")
+	ErrPRExists    = errors.New("PR exists")
+	ErrPRMerged    = errors.New("PR_MERGED")
+	ErrNotAssigned = errors.New("NOT_ASSIGNED")
+	ErrNoCandidate = errors.New("NO_CANDIDATE")
 )
 
 type PRUseCase struct {
@@ -126,10 +126,10 @@ func (uc *PRUseCase) ReassignReviewer(ctx context.Context, prID, oldUserID strin
 
 	var newReviewerID string
 	for _, member := range teamMembers {
-		if member.UserID != pr.AuthorID && 
-		   member.IsActive && 
-		   !contains(pr.AssignedReviewers, member.UserID) &&
-		   member.UserID != oldUserID {
+		if member.UserID != pr.AuthorID &&
+			member.IsActive &&
+			!contains(pr.AssignedReviewers, member.UserID) &&
+			member.UserID != oldUserID {
 			newReviewerID = member.UserID
 			break
 		}

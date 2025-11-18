@@ -89,7 +89,7 @@ func (r *UserRepo) GetByID(ctx context.Context, id string) (entity.User, error) 
 		FROM users WHERE user_id = $1
 	`
 	var u entity.User
-	
+
 	err := r.db.QueryRow(ctx, query, id).Scan(
 		&u.UserID, &u.Username, &u.TeamName, &u.IsActive,
 	)
@@ -99,7 +99,7 @@ func (r *UserRepo) GetByID(ctx context.Context, id string) (entity.User, error) 
 	if err != nil {
 		return entity.User{}, err
 	}
-	
+
 	return u, nil
 }
 
@@ -113,7 +113,7 @@ func (r *UserRepo) Update(ctx context.Context, u entity.User) error {
 	if err != nil {
 		return err
 	}
-	
+
 	if result.RowsAffected() == 0 {
 		return ErrNotFound
 	}
@@ -134,7 +134,7 @@ func (r *UserRepo) ListByTeam(ctx context.Context, teamName string) ([]entity.Us
 	var users []entity.User
 	for rows.Next() {
 		var u entity.User
-		
+
 		if err := rows.Scan(&u.UserID, &u.Username, &u.TeamName, &u.IsActive); err != nil {
 			return nil, err
 		}
@@ -158,7 +158,7 @@ func (r *UserRepo) ListAll(ctx context.Context) ([]entity.User, error) {
 	var users []entity.User
 	for rows.Next() {
 		var u entity.User
-		
+
 		if err := rows.Scan(&u.UserID, &u.Username, &u.TeamName, &u.IsActive); err != nil {
 			return nil, err
 		}
@@ -290,7 +290,7 @@ func (r *PRRepo) Create(ctx context.Context, pr entity.PullRequest) error {
 			assigned_reviewers, created_at, merged_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7)
 	`
-	
+
 	reviewersJSON, err := json.Marshal(pr.AssignedReviewers)
 	if err != nil {
 		return err
@@ -300,14 +300,13 @@ func (r *PRRepo) Create(ctx context.Context, pr entity.PullRequest) error {
 		pr.PullRequestID, pr.PullRequestName, pr.AuthorID, string(pr.Status),
 		reviewersJSON, pr.CreatedAt, pr.MergedAt,
 	)
-	
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key") {
 			return ErrAlreadyExists
 		}
 		return err
 	}
-	
+
 	return nil
 }
 
@@ -317,34 +316,34 @@ func (r *PRRepo) GetByID(ctx context.Context, id string) (entity.PullRequest, er
 		       assigned_reviewers, created_at, merged_at
 		FROM pull_requests WHERE pull_request_id = $1
 	`
-	
+
 	var pr entity.PullRequest
 	var status string
 	var reviewersJSON []byte
 	var mergedAt sql.NullTime
-	
+
 	err := r.db.QueryRow(ctx, query, id).Scan(
 		&pr.PullRequestID, &pr.PullRequestName, &pr.AuthorID, &status,
 		&reviewersJSON, &pr.CreatedAt, &mergedAt,
 	)
-	
+
 	if err == pgx.ErrNoRows {
 		return entity.PullRequest{}, ErrNotFound
 	}
 	if err != nil {
 		return entity.PullRequest{}, err
 	}
-	
+
 	pr.Status = entity.PRStatus(status)
-	
+
 	if err := json.Unmarshal(reviewersJSON, &pr.AssignedReviewers); err != nil {
 		return entity.PullRequest{}, err
 	}
-	
+
 	if mergedAt.Valid {
 		pr.MergedAt = &mergedAt.Time
 	}
-	
+
 	return pr, nil
 }
 
@@ -355,25 +354,24 @@ func (r *PRRepo) Update(ctx context.Context, pr entity.PullRequest) error {
 		    assigned_reviewers = $4, merged_at = $5
 		WHERE pull_request_id = $6
 	`
-	
+
 	reviewersJSON, err := json.Marshal(pr.AssignedReviewers)
 	if err != nil {
 		return err
 	}
-	
+
 	result, err := r.db.Exec(ctx, query,
 		pr.PullRequestName, pr.AuthorID, string(pr.Status),
 		reviewersJSON, pr.MergedAt, pr.PullRequestID,
 	)
-	
 	if err != nil {
 		return err
 	}
-	
+
 	if result.RowsAffected() == 0 {
 		return ErrNotFound
 	}
-	
+
 	return nil
 }
 
@@ -385,12 +383,12 @@ func (r *PRRepo) ListByReviewer(ctx context.Context, reviewerID string) ([]entit
 		WHERE assigned_reviewers @> $1::jsonb
 		ORDER BY created_at DESC
 	`
-	
+
 	reviewerJSON, err := json.Marshal([]string{reviewerID})
 	if err != nil {
 		return nil, err
 	}
-	
+
 	rows, err := r.db.Query(ctx, query, reviewerJSON)
 	if err != nil {
 		return nil, err
@@ -403,24 +401,24 @@ func (r *PRRepo) ListByReviewer(ctx context.Context, reviewerID string) ([]entit
 		var status string
 		var reviewersJSON []byte
 		var mergedAt sql.NullTime
-		
+
 		if err := rows.Scan(
 			&pr.PullRequestID, &pr.PullRequestName, &pr.AuthorID, &status,
 			&reviewersJSON, &pr.CreatedAt, &mergedAt,
 		); err != nil {
 			return nil, err
 		}
-		
+
 		pr.Status = entity.PRStatus(status)
-		
+
 		if err := json.Unmarshal(reviewersJSON, &pr.AssignedReviewers); err != nil {
 			return nil, err
 		}
-		
+
 		if mergedAt.Valid {
 			pr.MergedAt = &mergedAt.Time
 		}
-		
+
 		prs = append(prs, pr)
 	}
 
@@ -434,7 +432,7 @@ func (r *PRRepo) ListAll(ctx context.Context) ([]entity.PullRequest, error) {
 		FROM pull_requests 
 		ORDER BY created_at DESC
 	`
-	
+
 	rows, err := r.db.Query(ctx, query)
 	if err != nil {
 		return nil, err
@@ -447,24 +445,24 @@ func (r *PRRepo) ListAll(ctx context.Context) ([]entity.PullRequest, error) {
 		var status string
 		var reviewersJSON []byte
 		var mergedAt sql.NullTime
-		
+
 		if err := rows.Scan(
 			&pr.PullRequestID, &pr.PullRequestName, &pr.AuthorID, &status,
 			&reviewersJSON, &pr.CreatedAt, &mergedAt,
 		); err != nil {
 			return nil, err
 		}
-		
+
 		pr.Status = entity.PRStatus(status)
-		
+
 		if err := json.Unmarshal(reviewersJSON, &pr.AssignedReviewers); err != nil {
 			return nil, err
 		}
-		
+
 		if mergedAt.Valid {
 			pr.MergedAt = &mergedAt.Time
 		}
-		
+
 		prs = append(prs, pr)
 	}
 

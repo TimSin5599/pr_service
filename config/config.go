@@ -13,7 +13,7 @@ type (
 		HTTP    HTTP
 		Log     Log
 		PG      PG
-		RMQ		RMQ
+		RMQ     RMQ
 		Metrics Metrics
 		Swagger Swagger
 	}

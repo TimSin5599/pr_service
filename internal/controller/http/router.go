@@ -38,9 +38,9 @@ func NewRouter(app *fiber.App, cfg *config.Config, pr *usecase.PRUseCase, users 
 	// Swagger
 	if cfg.Swagger.Enabled {
 		app.Get("/swagger/*", swagger.New(swagger.Config{
-				URL:         	"/swagger.yaml",
-				DeepLinking: 	true,
-				DocExpansion:	"none",
+			URL:          "/swagger.yaml",
+			DeepLinking:  true,
+			DocExpansion: "none",
 		}))
 
 		app.Get("/swagger.yaml", func(c *fiber.Ctx) error {

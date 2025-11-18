@@ -19,11 +19,11 @@ type PRHandler struct {
 
 func NewHandler(uc *usecase.PRUseCase, userRepo usecase.UserRepo, teamRepo usecase.TeamRepo, prRepo usecase.PRRepo, l logger.Interface) *PRHandler {
 	return &PRHandler{
-		uc:   	uc,
-		teams: 	teamRepo,
-		users: 	userRepo,
-		prs:   	prRepo,
-		l:     	l,
+		uc:    uc,
+		teams: teamRepo,
+		users: userRepo,
+		prs:   prRepo,
+		l:     l,
 	}
 }
 

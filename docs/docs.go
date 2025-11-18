@@ -3,6 +3,7 @@ package docs
 
 import (
 	_ "embed"
+
 	"github.com/swaggo/swag"
 )
 

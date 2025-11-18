@@ -36,7 +36,7 @@ func Run(cfg *config.Config) {
 
 	// Usecase
 	prUC := usecase.NewPRUseCase(prRepo, userRepo, teamRepo)
-	
+
 	// HTTP Server
 	httpServer := httpserver.New(l, httpserver.Port(cfg.HTTP.Port), httpserver.Prefork(cfg.HTTP.UsePreforkMode))
 
