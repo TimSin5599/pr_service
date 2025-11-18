@@ -14,7 +14,7 @@ import (
 
 const (
 	// Base settings
-	host     = "localhost"
+	host     = "app"
 	attempts = 20
 
 	// Attempts connection
